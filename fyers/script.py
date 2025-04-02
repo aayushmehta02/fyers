@@ -6,7 +6,7 @@ import uuid
 
 import pandas as pd
 from download import FyersInstruments
-from fyers_api import fyersModel
+from fyers_api import fyersModel  # type: ignore
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -40,11 +40,11 @@ class FyersAPI:
     def __init__(self, session_token, app_id, app_secret):
         """Initialize FyersAPI with credentials and load instrument data."""
         
-        self.access_token = session_token
+        self.session_token = session_token
         self.app_id = app_id
         self.app_secret = app_secret
         self.obj = fyersModel.FyersModel(
-            token=self.access_token,
+            token=self.session_token,
             is_async=False,
             client_id=self.app_id,
             log_path=""

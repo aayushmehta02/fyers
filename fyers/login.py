@@ -52,16 +52,8 @@ class FyersLogin:
                 name=data['name'],
                 uid=user_id
             ).save()
-            
-            Users.update(user_id, 'is_new', False)
-            return redirect('https://tustaco.page.link/HKMg')
-            
-        except Exception as e:
-            print("\n**\nerror in add active users:", e)
-            return {'Message': 'Failure'}
 
-    def save_user_details(self, access_token, client_id, user_broker_details):
-        try:
+            Users.update(user_id, 'is_new', False)
             UserManager.save_active_user({
                 "broker": "Fyers",
                 "access_token": access_token,
@@ -75,7 +67,17 @@ class FyersLogin:
                 "password": user_broker_details['password'],
                 "yob": user_broker_details['yob']
             })
-            return redirect(APP_REDIRECT_URL)
+            # return redirect(APP_REDIRECT_URL)
+            
+            return redirect('https://tustaco.page.link/HKMg')
+        
+            
+        except Exception as e:
+            print("\n**\nerror in add active users:", e)
+            return {'Message': 'Failure'}
+
+    
+            
         except Exception as e:
             print(f"Error: {e}")
             return False
