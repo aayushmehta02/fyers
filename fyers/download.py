@@ -1,6 +1,7 @@
 # fyers_instruments.py
 
 import logging
+import os
 
 import pandas as pd
 
@@ -40,8 +41,18 @@ class FyersInstruments:
         "https://public.fyers.in/sym_details/MCX_COM.csv"  # MCX - Commodity
     ]
 
+    # Data types for CSV columns
+    DTYPES = {
+        "Fytoken": str,
+        "Exchange Instrument type": int,
+        "Exchange": int,
+        "Strike price": float,
+        "Minimum lot size": int
+    }
+
     @classmethod
     def download_instruments(cls):
+        """Download and save instrument data from Fyers."""
         try:
             dfs = []
             for url in cls.URLS:
@@ -67,6 +78,61 @@ class FyersInstruments:
 
         except Exception as e:
             logging.error(f"Error in download_instruments: {e}")
+            return None
+
+    @classmethod
+    def load_instruments(cls, file_path="fyers_instruments.csv"):
+        """
+        Load instruments data from CSV file.
+        
+        Args:
+            file_path (str): Path to the instruments CSV file
+            
+        Returns:
+            pd.DataFrame: Loaded instruments data
+            
+        Raises:
+            Exception: If loading fails
+        """
+        try:
+            if not os.path.exists(file_path):
+                logging.info(f"Instrument file not found at {file_path}. Downloading...")
+                return cls.download_instruments()
+
+            instruments_df = pd.read_csv(
+                file_path,
+                dtype=cls.DTYPES,
+                low_memory=False
+            )
+            
+            # Validate required columns
+            required_columns = ["Fytoken", "Exchange", "Exchange Instrument type", "Symbol ticker", "Underlying symbol"]
+            missing_columns = [col for col in required_columns if col not in instruments_df.columns]
+            if missing_columns:
+                raise Exception(f"Missing required columns: {missing_columns}")
+
+            logging.info("Successfully loaded instruments data")
+            return instruments_df
+
+        except Exception as e:
+            logging.error(f"Error loading instruments data: {e}")
+            raise Exception("Failed to load instruments data")
+
+    @classmethod
+    def get_instruments(cls, file_path="fyers_instruments.csv"):
+        """
+        Get instruments data, loading from file or downloading if necessary.
+        
+        Args:
+            file_path (str): Path to the instruments CSV file
+            
+        Returns:
+            pd.DataFrame: Instruments data
+        """
+        try:
+            return cls.load_instruments(file_path)
+        except Exception as e:
+            logging.error(f"Error getting instruments: {e}")
             return None
 
 if __name__ == "__main__":

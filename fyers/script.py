@@ -5,12 +5,14 @@ import time
 import uuid
 
 import pandas as pd
+from download import FyersInstruments
 from fyers_api import fyersModel
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 class FyersAPI:
+    instruments_df = None
     # Class constants
     EXCHANGE_CODES = {
         'NSE': 10,
@@ -37,11 +39,12 @@ class FyersAPI:
 
     def __init__(self, session_token, app_id, app_secret):
         """Initialize FyersAPI with credentials and load instrument data."""
+        
         self.access_token = session_token
         self.app_id = app_id
         self.app_secret = app_secret
         self.obj = fyersModel.FyersModel(
-            token=session_token,
+            token=self.access_token,
             is_async=False,
             client_id=self.app_id,
             log_path=""
@@ -49,19 +52,13 @@ class FyersAPI:
         self._load_instruments()
 
     def _load_instruments(self):
-        """Load instruments data from CSV file."""
+        """Load instruments data using FyersInstruments class."""
         try:
-            self.instruments_df = pd.read_csv(
-                "fyers_instruments.csv",
-                dtype={
-                    "Fytoken": str,
-                    "Exchange Instrument type": int,
-                    "Exchange": int,
-                    "Strike price": float,
-                    "Minimum lot size": int
-                },
-                low_memory=False
-            )
+            FyersAPI.instruments_df = FyersInstruments.get_instruments()
+
+
+            if self.instruments_df is None:
+                raise Exception("Failed to load instruments data")
             logging.info("Successfully loaded instruments data")
         except Exception as e:
             logging.error(f"Error loading instruments data: {e}")
@@ -74,9 +71,12 @@ class FyersAPI:
     def get_funds(self):
         """Fetch available funds from the account."""
         try:
-            funds = self.obj.funds().get('fund_limit', [])
-            margins = next((item for item in funds if item.get('id') == 10), None)
-            return margins.get('equityAmount', 0)
+            funds = self.obj.funds().get('fund_limit', [{}])[0]
+            print(funds)
+            return funds.get('equityAmount', 0)
+
+            # margins = next((item for item in funds if item.get('id') == 10), None)
+            # return margins.get('equityAmount', 0)
         except Exception as e:
             logging.error(f"Error in fetching funds: {e}")
             return 0
@@ -101,6 +101,7 @@ class FyersAPI:
                 row = row[row['Exchange Instrument type'] == 0]
             elif exchange_code in ["NFO", "BFO"]:
                 row = row[row['Exchange Instrument type'] == 14]
+                print(row)
             elif exchange_code == "MCX":
                 row = row[row['Exchange Instrument type'] == 11]
 
@@ -127,6 +128,82 @@ class FyersAPI:
         except Exception as e:
             print(f"Error in canceling order: {e}")
             return None
+    @classmethod
+    def filter_by_expiry(cls, df, expiry='W'):
+        # Convert Unix timestamp to datetime
+        df = df.copy()
+        df['Expiry date'] = pd.to_datetime(df['Expiry date'], unit='s')
+
+        # Find the last expiry date in each month
+        monthly_expiry_df = df.loc[df.groupby(df['Expiry date'].dt.to_period('M'))['Expiry date'].idxmax()]
+
+        if expiry == 'W':
+            # Weekly expiry, return the first record
+            return df.iloc[0]
+        elif expiry == 'NW':
+            # Next weekly expiry, return the second record
+            return df.iloc[1]
+        elif expiry == 'M':
+            # Monthly expiry, return the first record in monthly_expiry_df
+            return monthly_expiry_df.iloc[0]
+        elif expiry == 'NM':
+            # Next monthly expiry, return the second record in monthly_expiry_df
+            return monthly_expiry_df.iloc[1]
+        elif expiry == 'NNM':
+            # Next-next monthly expiry, return the third record in monthly_expiry_df
+            return monthly_expiry_df.iloc[2]
+
+    @classmethod
+    def filter_fno_instruments(cls, df, exch_seg, symbol, strike_price, ce_pe, instrumenttype):
+        exch_seg_code = cls.EXCHANGE_CODES.get(exch_seg, 12)
+        segment_type = cls.SEGMENT_TYPES.get(instrumenttype.upper(), None)
+        if segment_type is None:
+            return pd.DataFrame()
+        
+
+        df_filtered = df[(df['Exchange'] == exch_seg_code) &
+                         (df['Underlying symbol'] == symbol) &
+                         (df['Exchange Instrument type'] == segment_type)]
+
+        if instrumenttype.upper() in ["FUTIDX", "FUTIVX", "FUTSTK", "FUTCUR", "FUTIRT", "FUTIRC", "FUTCOM"]:
+            return df_filtered
+        return df_filtered[(df_filtered['Strike price'] == strike_price) & (df_filtered['Option type'] == ce_pe)]
+
+    @classmethod
+    def get_fyers_token_details(cls, exch_seg, symbol, strike_price=None, is_pe=1, expiry='W', instrumenttype=None):
+        ce_pe = "PE" if is_pe == 1 else "CE"
+        symbol = symbol.upper()
+        
+        df = cls.instruments_df.copy()
+        try:
+            if exch_seg in ['NFO', 'MCX', 'BFO']:
+                df_filtered = cls.filter_fno_instruments(
+                    df, exch_seg, symbol, strike_price, ce_pe, instrumenttype
+                )
+                if df_filtered.empty:
+                    print(f"No token found for {symbol} {strike_price}{ce_pe} in {exch_seg}")
+                    return None, None
+                token_info = cls.filter_by_expiry(df_filtered, expiry)
+            else:
+                exch_seg_code = cls.EXCHANGE_CODES.get(exch_seg, 12)
+                df_filtered = df[
+                    (df['Exchange'] == exch_seg_code) &
+                    (df['Underlying symbol'] == symbol) &
+                    (df['Exchange Instrument type'].isin([0, 4, 50]))
+                ]
+                if df_filtered.empty:
+                    print(f"No token found for {symbol} in {exch_seg}")
+                    return None, None
+                token_info = df_filtered.iloc[0]
+
+            if token_info is not None:
+                return token_info['Scrip code'], token_info['Symbol ticker'],  token_info['Minimum lot size']
+            return None, None, "No token found"
+        except Exception as e:
+            print(f'Error caught in getting Fyers token info: {e}')
+            return None, None, "Error in getting Fyers token info"
+
+        
 
     def place_order_on_broker(self, symbol_token, symbol, qty, exchange_code, buy_sell, order_type, price, is_paper=False, is_overnight=False):
         try:
@@ -170,29 +247,9 @@ class FyersAPI:
                 if not average_price:
                     return None, None, "Order placement failed - No order ID returned."
                     
+             
+              
                 
-               
-                
-                # Fetch individual order details after placing the order
-                count = 0
-                order_details = None
-                while count < 3:
-                    try:
-                        order_details = self.obj.orderbook(data={"id": order_id})
-                        break
-                    except:
-                        time.sleep(0.1)
-                        count += 1
-                    
-                if order_details is None:
-                    return None, None, "Order placement failed - Couldn't fetch order details."
-                
-                order_details = order_details.get('orderBook', [{}])[0]
-                status = order_details.get('status')
-                filled_quantity = order_details.get('filledQty', 0)
-
-                print(f"Order Status: {status}, Filled Quantity: {filled_quantity}")
-
                 
             else:
                 order_id = 'Paper' + str(uuid.uuid4())
@@ -272,17 +329,33 @@ if __name__ == "__main__":
         "session_token": ""
     }
     
-    # Ensure latest instrument data
-    from download import FyersInstruments
+   
     if not os.path.exists("fyers_instruments.csv"):
         FyersInstruments.download_instruments()
     
     # Initialize and test API
     fyers_api = FyersAPI(**creds)
     
-    # Test functionality
-    print("Funds:", fyers_api.get_funds())
-    print("LTP:", fyers_api.get_ltp("NSE", "2885"))
-    print(fyers_api.place_order_on_broker(
-        "874306", "BSE:SENSEX2540870000CE", 100, "BFO", "BUY", "LIMIT", 1000, False, True
-    ))
+    print("\nCash Order Test (NSE, TCS):")
+    token, symbol, lot_size = fyers_api.get_fyers_token_details('NSE', 'TCS')
+    print("Token:", token, "| Symbol:", symbol, "| Lot size:", lot_size)
+    print(fyers_api.place_order_on_broker(token, symbol, 1, 'NSE', "BUY", "MARKET", 0, is_paper=True))
+
+    print("\nFNO Order Test (NFO, NIFTY, 23000 PE, Weekly):")
+    token, symbol, lot_size = fyers_api.get_fyers_token_details('NFO', 'NIFTY', 23000, 1, 'W', 'OPTIDX')
+    print("Token:", token, "| Symbol:", symbol, "| Lot size:", lot_size)
+    print(fyers_api.place_order_on_broker(token, symbol, 50, 'NFO', "BUY", "MARKET", 0, is_paper=True))
+
+    print("\nFutures Order Test (NFO, NIFTY, Monthly FUTIDX):")
+    token, symbol, lot_size = fyers_api.get_fyers_token_details('NFO', 'NIFTY', expiry='M', instrumenttype='FUTIDX')
+    print("Token:", token, "| Symbol:", symbol, "| Lot size:", lot_size)
+    print(fyers_api.place_order_on_broker(token, symbol, 50, 'NFO', "BUY", "MARKET", 0, is_paper=True))
+
+    print("\nSensex Option (BFO, SENSEX, 77400 CE, Weekly):")
+    token, symbol, lot_size = fyers_api.get_fyers_token_details('BFO', 'SENSEX', 77400, 0, 'W', 'OPTIDX')
+    print("Token:", token, "| Symbol:", symbol, "| Lot size:", lot_size)
+    print(fyers_api.place_order_on_broker(token, symbol, 15, 'BFO', "BUY", "MARKET", 0, is_paper=True))
+
+    print("\nLTP Examples:")
+    print("NSE:", fyers_api.get_ltp('NSE', token))  # Last token from above
+    print("NFO:", fyers_api.get_ltp('NFO', token))  # Same

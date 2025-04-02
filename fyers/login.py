@@ -1,75 +1,80 @@
 # login.py
 import json
-import urllib.parse
 
-import pyotp
-from breeze_connect import BreezeConnect  # type:ignore
-from fyers_api import accessToken, fyersModel
-from NorenRestApiPy.NorenApi import NorenApi
+from flask import redirect, request
+from fyers_api import accessToken, fyersModel  # type: ignore
 
 
-class ICICILogin:
-    def __init__(self, tusta_user_id, client_id, api_secret):
-        self.client_id = client_id
-        self.api_secret = api_secret
+class FyersLogin:
+    def __init__(self, tusta_user_id):
+        
         
         self.tusta_user_id = tusta_user_id
        
     def icici_handle_login(self):
         try:
-            user_broker_details = UserBrokerDetails.getUserBrokerDetailsByUserIdAndBroker(
-                self.tusta_user_id , "Fyers" #here user_id is tusta user_id
-            )
-            api_key = user_broker_details.get('app_key')
-            api_secret = user_broker_details.get('api_secret')
-            client_id = user_broker_details.get('client_id')
-            if not all([
-                api_key, #for icici only get client id
-                api_secret, #for icici only get api secret
-                client_id #for icici only get api key
-            ]): 
-                raise BrokerError("Missing required Fyers credentials")
-
-            # Initialize ICICI client and login
-            session=accessToken.SessionModel(
-                client_id=self.client_id,
-                secret_key=self.api_secret,  # Make sure your secret key is not exposed publicly
-                redirect_uri="https://api.tusta.co/active_users/fyers",
+            auth_code = request.args.get('auth_code')
+            broker_details = BrokerDetails.getBrokerDetails('Fyers')
+            app_id = broker_details['app_id']
+            redirect_uri = broker_details['redirect_url']
+            app_secret = broker_details['app_secret']
+            
+            appSession = fyersModel.SessionModel(
+                client_id=app_id,
+                redirect_uri=redirect_uri,
                 response_type="code",
+                state="sample",
+                secret_key=app_secret,
                 grant_type="authorization_code"
-                )
-            auth_url = session.generate_authcode()
-            print(auth_url)
-            session.get_access_token(auth_code="")
-            response = session.generate_token()
-            access_token = response.get('access_token')
+            )
+            
+            appSession.set_token(auth_code)
+            response = appSession.generate_token()
 
+            try:
+                access_token = response["access_token"]
+            except Exception as e:
+                print(e, response)
+                return {'Message': 'Missing access token'}
 
+            fyers = fyersModel.FyersModel(token=access_token, is_async=False, client_id=app_id, log_path="")
+            data = fyers.get_profile()['data']
+            client_id = data['fy_id']
+            user_broker_details = UserBrokerDetails.getUserBrokerDetailsByClientId(client_id)
+            user_id = user_broker_details['user_id']
+            
+            ActiveUsers(
+                broker="Fyers",
+                feed_token=None,
+                access_token=access_token,
+                refresh_token=None,
+                clientCode=client_id,
+                name=data['name'],
+                uid=user_id
+            ).save()
+            
+            Users.update(user_id, 'is_new', False)
+            return redirect('https://tustaco.page.link/HKMg')
+            
+        except Exception as e:
+            print("\n**\nerror in add active users:", e)
+            return {'Message': 'Failure'}
 
-            login_obj = fyersModel.FyersModel(
-            token=access_token,
-            is_async=False,
-            client_id=self.client_id,
-            log_path=""
-        )
-            load = json.loads(login_obj.get_profile())
-
-
-
+    def save_user_details(self, access_token, client_id, user_broker_details):
+        try:
             UserManager.save_active_user({
-            "broker": "Fyers",
-            "access_token": access_token,
-            "api_key": self.api_key,
-            "refresh_token": None,
-            "secret_key": self.api_secret,
-            "clientCode": client_id,
-            "name": user_broker_details['user_name'],
-            "uid": self.tusta_user_id,
-            "feed_token": None,
-            "password": user_broker_details['password'],
-            "yob": user_broker_details['yob']
-        })
-
+                "broker": "Fyers",
+                "access_token": access_token,
+                "api_key": self.api_key,
+                "refresh_token": None,
+                "secret_key": self.api_secret,
+                "clientCode": client_id,
+                "name": user_broker_details['user_name'],
+                "uid": self.tusta_user_id,
+                "feed_token": None,
+                "password": user_broker_details['password'],
+                "yob": user_broker_details['yob']
+            })
             return redirect(APP_REDIRECT_URL)
         except Exception as e:
             print(f"Error: {e}")
