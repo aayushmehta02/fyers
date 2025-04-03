@@ -11,7 +11,7 @@ class FyersLogin:
         
         self.tusta_user_id = tusta_user_id
        
-    def icici_handle_login(self):
+    def fyers_handle_login(self):
         try:
             auth_code = request.args.get('auth_code')
             broker_details = BrokerDetails.getBrokerDetails('Fyers')
@@ -41,19 +41,11 @@ class FyersLogin:
             data = fyers.get_profile()['data']
             client_id = data['fy_id']
             user_broker_details = UserBrokerDetails.getUserBrokerDetailsByClientId(client_id)
-            user_id = user_broker_details['user_id']
+            self.tusta_user_id = user_broker_details['user_id']
             
-            ActiveUsers(
-                broker="Fyers",
-                feed_token=None,
-                access_token=access_token,
-                refresh_token=None,
-                clientCode=client_id,
-                name=data['name'],
-                uid=user_id
-            ).save()
+            
 
-            Users.update(user_id, 'is_new', False)
+            Users.update(self.tusta_user_id, 'is_new', False)
             UserManager.save_active_user({
                 "broker": "Fyers",
                 "access_token": access_token,
