@@ -6,10 +6,10 @@ from fyers_api import accessToken, fyersModel  # type: ignore
 
 
 class FyersLogin:
-    def __init__(self, tusta_user_id):
+    # def __init__(self, tusta_user_id):
         
         
-        self.tusta_user_id = tusta_user_id
+    #     self.tusta_user_id = tusta_user_id
        
     def fyers_handle_login(self):
         try:
@@ -41,7 +41,7 @@ class FyersLogin:
             data = fyers.get_profile()['data']
             client_id = data['fy_id']
             user_broker_details = UserBrokerDetails.getUserBrokerDetailsByClientId(client_id)
-            self.tusta_user_id = user_broker_details['user_id']
+            tusta_user_id = user_broker_details['user_id']
             
             
 
@@ -54,7 +54,7 @@ class FyersLogin:
                 "secret_key": self.api_secret,
                 "clientCode": client_id,
                 "name": user_broker_details['user_name'],
-                "uid": self.tusta_user_id,
+                "uid": tusta_user_id,
                 "feed_token": None,
                 "password": user_broker_details['password'],
                 "yob": user_broker_details['yob']
