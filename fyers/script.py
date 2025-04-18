@@ -71,8 +71,9 @@ class FyersAPI:
     def get_funds(self):
         """Fetch available funds from the account."""
         try:
+            # print(self.obj.funds())
             funds = self.obj.funds().get('fund_limit', [{}])[0]
-            print(funds)
+            # print(funds)
             return funds.get('equityAmount', 0)
 
             # margins = next((item for item in funds if item.get('id') == 10), None)
@@ -324,10 +325,11 @@ class FyersAPI:
 if __name__ == "__main__":
     # Configuration
     creds = {
-        "app_id": "",
-        "app_secret": "",
-        "session_token": ""
+        "app_id": "8UJ43NICTL-102",
+        "app_secret": "17RFXXAD5U",
+        "session_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsiZDoxIiwiZDoyIiwieDowIiwieDoxIiwieDoyIl0sImF0X2hhc2giOiJnQUFBQUFCb0FnZ1VMd2pOUXQ0ekpjNk9Bbkw5X3Y5VVc3R1JiMXJlUEl5QXZMallaY21iaVBsbUVGY290MXQ3QTk1U2hmOHJMLUJKMjVzZnJMT05QdHFpNTU5NjBfOG55VFR5VXNyNDhtY1B5THR3Rnk5ZElrdz0iLCJkaXNwbGF5X25hbWUiOiIiLCJvbXMiOiJLMSIsImhzbV9rZXkiOiI1MDFlNDZmYWUzNmYyNmExNzc4NjU5MDc2NzAxYzMyNGVmZGRhZjM4ZGEwNWMwYzIwMzM1ZTkxZCIsImlzRGRwaUVuYWJsZWQiOiJOIiwiaXNNdGZFbmFibGVkIjoiTiIsImZ5X2lkIjoiWUgwMzExMCIsImFwcFR5cGUiOjEwMiwiZXhwIjoxNzQ1MDIyNjAwLCJpYXQiOjE3NDQ5NjM2MDQsImlzcyI6ImFwaS5meWVycy5pbiIsIm5iZiI6MTc0NDk2MzYwNCwic3ViIjoiYWNjZXNzX3Rva2VuIn0.CfBqHlf7JzTyxLHKz0cMcAuhLfa9nivCd9QKajl8QuY"
     }
+    
     
    
     if not os.path.exists("fyers_instruments.csv"):
@@ -339,23 +341,24 @@ if __name__ == "__main__":
     print("\nCash Order Test (NSE, TCS):")
     token, symbol, lot_size = fyers_api.get_fyers_token_details('NSE', 'TCS')
     print("Token:", token, "| Symbol:", symbol, "| Lot size:", lot_size)
-    print(fyers_api.place_order_on_broker(token, symbol, 1, 'NSE', "BUY", "MARKET", 0, is_paper=True))
+    print(fyers_api.place_order_on_broker(token, symbol, 1, 'NSE', "BUY", "MARKET", 0, is_paper=False))
 
     print("\nFNO Order Test (NFO, NIFTY, 23000 PE, Weekly):")
     token, symbol, lot_size = fyers_api.get_fyers_token_details('NFO', 'NIFTY', 23000, 1, 'W', 'OPTIDX')
     print("Token:", token, "| Symbol:", symbol, "| Lot size:", lot_size)
-    print(fyers_api.place_order_on_broker(token, symbol, 50, 'NFO', "BUY", "MARKET", 0, is_paper=True))
+    print(fyers_api.place_order_on_broker(token, symbol, 75, 'NFO', "BUY", "MARKET", 0, is_paper=False))
 
     print("\nFutures Order Test (NFO, NIFTY, Monthly FUTIDX):")
     token, symbol, lot_size = fyers_api.get_fyers_token_details('NFO', 'NIFTY', expiry='M', instrumenttype='FUTIDX')
     print("Token:", token, "| Symbol:", symbol, "| Lot size:", lot_size)
-    print(fyers_api.place_order_on_broker(token, symbol, 50, 'NFO', "BUY", "MARKET", 0, is_paper=True))
+    print(fyers_api.place_order_on_broker(token, symbol, 75, 'NFO', "BUY", "MARKET", 0, is_paper=False))
 
     print("\nSensex Option (BFO, SENSEX, 77400 CE, Weekly):")
     token, symbol, lot_size = fyers_api.get_fyers_token_details('BFO', 'SENSEX', 77400, 0, 'W', 'OPTIDX')
     print("Token:", token, "| Symbol:", symbol, "| Lot size:", lot_size)
-    print(fyers_api.place_order_on_broker(token, symbol, 15, 'BFO', "BUY", "MARKET", 0, is_paper=True))
+    print(fyers_api.place_order_on_broker(token, symbol, 20, 'BFO', "BUY", "MARKET", 0, is_paper=False))
 
     print("\nLTP Examples:")
     print("NSE:", fyers_api.get_ltp('NSE', token))  # Last token from above
     print("NFO:", fyers_api.get_ltp('NFO', token))  # Same
+    print(fyers_api.get_funds())
