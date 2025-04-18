@@ -70,9 +70,7 @@ class FyersLogin:
 
     
             
-        except Exception as e:
-            print(f"Error: {e}")
-            return False
+        
 
 
            
